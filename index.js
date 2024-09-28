@@ -17,11 +17,33 @@ const getFileSizeInMB = (filePath) => {
 };
 
 // Function to compress an image
-async function compressImage(inputPath, outputPath, quality = 80) {
+async function compressImage(
+  inputPath,
+  outputPath,
+  quality = 60,
+  targetExt = "jpg"
+) {
   try {
     const originalSize = getFileSizeInMB(inputPath);
 
-    await sharp(inputPath).jpeg({ quality, mozjpeg: true }).toFile(outputPath);
+    let sharpInstance = sharp(inputPath);
+
+    switch (targetExt.toLowerCase()) {
+      case "jpeg":
+      case "jpg":
+        sharpInstance = sharpInstance.jpeg({ quality, mozjpeg: true });
+        break;
+      case "webp":
+        sharpInstance = sharpInstance.webp({ quality });
+        break;
+      case "png":
+        sharpInstance = sharpInstance.png({ quality });
+        break;
+      default:
+        throw new Error(`Unsupported target extension: ${targetExt}`);
+    }
+
+    await sharpInstance.toFile(outputPath);
 
     const compressedSize = getFileSizeInMB(outputPath);
     const savedSize = originalSize - compressedSize;
@@ -33,7 +55,12 @@ async function compressImage(inputPath, outputPath, quality = 80) {
 }
 
 // Main function to process the directory
-async function compressImagesInDirectory(sourceDir, exportDir, quality) {
+async function compressImagesInDirectory(
+  sourceDir,
+  exportDir,
+  quality,
+  targetExt
+) {
   try {
     const files = await fs.readdir(sourceDir);
     const imageFiles = files.filter((file) =>
@@ -70,11 +97,19 @@ async function compressImagesInDirectory(sourceDir, exportDir, quality) {
 
     for (const [index, file] of imageFiles.entries()) {
       const inputPath = path.join(sourceDir, file);
-      const outputPath = path.join(exportDir, file);
+      const outputPath = path.join(
+        exportDir,
+        `${path.parse(file).name}.${targetExt}`
+      );
 
       spinner.text = `Compressing ${file}...`;
 
-      const result = await compressImage(inputPath, outputPath, quality);
+      const result = await compressImage(
+        inputPath,
+        outputPath,
+        quality,
+        targetExt
+      );
       if (result) {
         totalOriginalSize += result.originalSize;
         totalSavedSize += result.savedSize;
@@ -122,7 +157,7 @@ async function compressImagesInDirectory(sourceDir, exportDir, quality) {
 // Define CLI arguments using yargs
 const argv = yargs(hideBin(process.argv))
   .usage(
-    "Usage: $0 --sourceDir <sourceDir> --exportDir <exportDir> --quality <quality>"
+    "Usage: $0 --sourceDir <sourceDir> --exportDir <exportDir> --quality <quality> --targetExt <targetExt>"
   )
   .option("sourceDir", {
     alias: "s",
@@ -139,11 +174,23 @@ const argv = yargs(hideBin(process.argv))
   .option("quality", {
     alias: "q",
     describe: "Quality percentage for image compression (0-100)",
-    default: 80,
+    default: 60,
     type: "number",
+  })
+  .option("ext", {
+    alias: "t",
+    describe:
+      "Target file extension for compressed images (jpg, jpeg, webp, png)",
+    default: "webp",
+    type: "string",
   })
   .help("h")
   .alias("h", "help").argv;
 
 // Run the main function
-compressImagesInDirectory(argv.sourceDir, argv.exportDir, argv.quality);
+compressImagesInDirectory(
+  argv.sourceDir,
+  argv.exportDir,
+  argv.quality,
+  argv.ext
+);
